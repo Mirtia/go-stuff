@@ -27,16 +27,33 @@ func level1(option string, value string) bool {
 	// Go through the config, find all active lines with PasswordAuthentication
 	// Only the last line for the option in the config counts
 	optionArr := []string{}
+
 	for _, s := range stringArr {
-		slice := strings.Fields(s)
-		if len(slice) > 2 || len(slice) == 0 {
+		// Trim leading and trailing whitespace from the line
+		trimmedLine := strings.TrimSpace(s)
+		// fmt.Println(trimmedLine)
+
+		// Skip empty lines and commented-out lines
+		if trimmedLine == "" || strings.HasPrefix(trimmedLine, "#") {
 			continue
 		}
-		if slice[0] == option {
-			optionArr = append(optionArr, slice[1])
+
+		fields := strings.Fields(trimmedLine)
+		// Check if the first field matches the option we're looking for
+		if len(fields) > 1 && fields[0] == option {
+			// Add the option value to the slice
+			optionArr = append(optionArr, fields[1])
 		}
 	}
-	return len(optionArr) > 0 && strings.ToLower(optionArr[len(optionArr)-1]) == value
+
+	fmt.Println(optionArr)
+
+	// Check if the last occurrence of the option has the desired value
+	if len(optionArr) > 0 {
+		return strings.ToLower(optionArr[len(optionArr)-1]) == strings.ToLower(value)
+	}
+	// If option not found return false
+	return false
 }
 
 func level2() bool {

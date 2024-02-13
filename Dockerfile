@@ -3,7 +3,7 @@ FROM ubuntu:latest
 
 # Install SSH server and sudo package
 RUN apt-get update && \
-    apt-get install -y openssh-server sudo && \
+    apt-get install -y openssh-server sudo vim nano && \
     mkdir /var/run/sshd
 
 # Set a password for the root user
@@ -35,7 +35,7 @@ COPY audit /home/bitty/audit
 RUN chmod u+s /home/bitty/audit && \
     chmod a+x /home/bitty/audit
 
-USER bitty
+# USER bitty
 
 # Run audit bin
 CMD ["tail", "-f", "/dev/null"]
