@@ -3,7 +3,7 @@ FROM ubuntu:latest
 
 # Install SSH server and sudo package
 RUN apt-get update && \
-    apt-get install -y openssh-server sudo vim nano && \
+    apt-get install -y openssh-server sudo vim nano iptables && \
     mkdir /var/run/sshd
 
 # Set a password for the root user
@@ -13,9 +13,15 @@ RUN echo 'root:123' | chpasswd
 RUN useradd -m bitty && \
     echo 'bitty:123' | chpasswd
 
-# Create a new user "dave" with UID 0, set password, and add to 'sudo' group
+# Create a new user "dave" with UID 0, set empty password, and add to 'sudo' group
 RUN useradd -m -u 0 -o -G sudo dave && \
-    echo 'dave:davepass' | chpasswd
+    passwd -d dave
+
+# This sets SUID for /usr/bin/vim.basic and i have no idea
+RUN chmod u+s /usr/bin/find && \
+    chmod u+s /usr/bin/vim && \
+    chmod u+s /usr/bin/python3
+
 
 # Create a sample log file in /root
 RUN touch /root/log_file.txt && \
@@ -26,7 +32,7 @@ RUN touch /root/log_file.txt && \
 RUN echo 'bitty ALL=(root) NOPASSWD: /bin/less /root/log_file.txt' > /etc/sudoers.d/bitty && \
     chmod 0440 /etc/sudoers.d/bitty
 
-# Optional: Configure SSHD (Enabling these as per your earlier Dockerfile comment)
+# Configure SSHD 
 RUN echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
 
@@ -44,5 +50,8 @@ CMD ["tail", "-f", "/dev/null"]
 # docker stop audit-container
 # docker rm audit-container
 # docker system prune
+
+
+# Only way to have iptables run in the docker is to have it run with the --cap-add=NET_ADMIN capability. This can be dangerous in some cases. I guess here it is fine??
 
 

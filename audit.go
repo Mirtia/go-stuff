@@ -68,22 +68,25 @@ func level2() bool {
 	// Convert the output to a string for parsing
 	output := string(out)
 
-	// Define search patterns that represent a rate limiting rule on port 22
-	// These are basic examples
-	patterns := []string{
-		"-p tcp --dport 22 -m limit --limit",
-		"-p tcp --dport 22 -j DROP",
-		"-p tcp --dport 22 -j REJECT",
+	// Define required parts for a rate limiting rule on port 22
+	requiredParts := []string{
+		"-p tcp",
+		"--dport 22",
+		"-m limit",
+		"--limit",
 	}
 
-	// Check if the output contains any of the defined patterns
-	for _, pattern := range patterns {
-		if strings.Contains(output, pattern) {
-			return true // Found a matching rule
+	// Check if the output contains all of the required parts. If so then it is probably correct(?)
+	containsAllParts := true
+	for _, part := range requiredParts {
+		if !strings.Contains(output, part) {
+			containsAllParts = false
+			break
 		}
 	}
 
-	return false // No matching rule found
+	return containsAllParts // Returns true if all parts are found, false otherwise
+	// Example command to pass: sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m limit --limit 3/min -j ACCEPT
 }
 
 func level3() bool {
@@ -96,12 +99,13 @@ func level3() bool {
 
 	bins := strings.Fields(string(out))
 
-	return !(slices.Contains(bins, "/bin/vim") || slices.Contains(bins, "bin/find") || slices.Contains(bins, "/bin/python3"))
+	return !(slices.Contains(bins, "/usr/bin/vim") || slices.Contains(bins, "/usr/bin/find") || slices.Contains(bins, "/usr/bin/python3"))
+	// To pass: sudo chmod u-s /usr/bin/find
 }
 
 func level4() bool {
 	// Check if dangerous sudo permissions are given for user bitty
-	cmd := exec.Command("/bin/cat", "/etc/sudoers")
+	cmd := exec.Command("/bin/cat", "/etc/sudoers.d/bitty")
 	out, _ := cmd.Output()
 
 	if strings.Contains(string(out), "/bin/less /root/log_file.txt") {
@@ -109,6 +113,7 @@ func level4() bool {
 	}
 
 	return true
+	// To pass: rm rf /etc/sudoers.d/bitty
 }
 
 func level5() bool {
@@ -118,7 +123,6 @@ func level5() bool {
 
 	passwdLines := strings.Split(string(dat), "\n")
 	for _, line := range passwdLines {
-		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -126,53 +130,43 @@ func level5() bool {
 		// Ensure line has enough fields and UID field exists
 		if len(fields) > 2 {
 			uid := fields[2]
-			// Skip root user
-			if uid == "0" {
-				continue
-			}
 			username := fields[0]
 
-			// Check if user has an entry in /etc/shadow
-			shadowDat, err := os.ReadFile("/etc/shadow")
-			check(err)
-
-			shadowLines := strings.Split(string(shadowDat), "\n")
-			for _, sLine := range shadowLines {
-				if strings.HasPrefix(sLine, username+":") {
-					return false // Found a non-root user in /etc/shadow
-				}
+			// Check for UID 0 that is not the root user
+			if uid == "0" && username != "root" {
+				return false
 			}
 		}
 	}
-	return true // No non-root users found in /etc/shadow
+	return true // No security issues found
+	// TO pass, either use usermod -u 1111 dave, or manually edit passwd file
+
 }
 
 func level6() bool {
-	// Read the /etc/shadow file to check for users without a password
+	// Read the /etc/shadow file to check for the dave user's password
 	dat, err := os.ReadFile("/etc/shadow")
 	check(err)
 
 	shadowLines := strings.Split(string(dat), "\n")
 	for _, line := range shadowLines {
-		// Skip empty lines
 		if line == "" {
 			continue
 		}
 		fields := strings.Split(line, ":")
-		// Ensure line has enough fields
-		if len(fields) < 2 {
-			continue
-		}
-		// The second field contains the password
-		// Check if the password field is empty, "*", or "!"
-		passwordField := fields[1]
-		if passwordField == "" || passwordField == "*" || passwordField == "!" {
-			fmt.Printf("User without a password found: %s\n", fields[0])
-			return false // Found a user without a password
+		if fields[0] == "dave" {
+			// Check if the password field is empty, "*", or "!"
+			passwordField := fields[1]
+			if passwordField == "" || passwordField == "*" || passwordField == "!" {
+				fmt.Printf("User without a password found: %s\n", fields[0])
+				return false
+			}
+			return true
 		}
 	}
 
-	return true // No users without a password found
+	return false // If dave is not found in /etc/shadow, consider it a fail
+	// To pass: passwd dave
 }
 
 func level7() bool {
@@ -266,7 +260,7 @@ func main() {
 	if !level4() {
 		fmt.Println("4: ☐")
 		if hintFlag {
-			fmt.Println("- Try finding out if your current user (bitty) can run commands as sudo. Should the user be able to run that command? Could it be dangerous?")
+			fmt.Println("- Try finding out if any users can run commands as sudo. Should the user be able to run that command? Could it be dangerous?")
 		}
 		os.Exit(0)
 	}
@@ -275,7 +269,7 @@ func main() {
 	if !level5() {
 		fmt.Println("5: ☐")
 		if hintFlag {
-			fmt.Println("- Check for unexpected user entries in /etc/shadow that could indicate security issues.")
+			fmt.Println("- Check for unexpected user entries in /etc/passwd that could indicate security issues.")
 		}
 		os.Exit(0)
 	}
@@ -284,7 +278,7 @@ func main() {
 	if !level6() {
 		fmt.Println("6: ☐")
 		if hintFlag {
-			fmt.Println("- Check for users without a password set and remove them")
+			fmt.Println("- Check for non-service users without a password set and remove them")
 		}
 		os.Exit(0)
 	}
@@ -293,7 +287,7 @@ func main() {
 	if !level7() {
 		fmt.Println("7: ☐")
 		if hintFlag {
-			fmt.Println("- Ensure all user passwords are changed at least every 90 days.")
+			fmt.Println("- Ensure all user passwords are changed at least every 90 days.") // maybe remove this chall we've kinda talked shit about this during lectures
 		}
 		os.Exit(0)
 	}
@@ -313,4 +307,6 @@ func main() {
 	// Only allow root to access CRON
 	//  /etc/shadow
 	// 3. Set strong password policy
+	// IDEA: set an interactive shell for a service account in passwd
+	// IDEA: bonus levels with linux backdoors??? Could be cool.
 }
