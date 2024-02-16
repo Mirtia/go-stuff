@@ -3,7 +3,7 @@ FROM ubuntu:latest
 
 # Install SSH server and sudo package
 RUN apt-get update && \
-    apt-get install -y openssh-server sudo vim nano iptables && \
+    apt-get install -y openssh-server sudo vim nano iptables netcat iproute2 && \
     mkdir /var/run/sshd
 
 # Set a password for the root user
@@ -43,8 +43,9 @@ RUN chmod u+s /home/bitty/audit && \
 
 # USER bitty
 
+
 # Run audit bin
-CMD ["tail", "-f", "/dev/null"]
+CMD ["sh", "-c", "nc -lvnp 3306 -s 0.0.0.0 & tail -f /dev/null"]
 # docker build -t audit .                                                                                                                                                                                         0.0s
 # bitis@Workstation ~/s/netsec> docker run -d --name audit-container test
 # docker stop audit-container

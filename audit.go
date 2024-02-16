@@ -6,9 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 )
 
 func check(e error) {
@@ -45,8 +43,6 @@ func level1(option string, value string) bool {
 			optionArr = append(optionArr, fields[1])
 		}
 	}
-
-	fmt.Println(optionArr)
 
 	// Check if the last occurrence of the option has the desired value
 	if len(optionArr) > 0 {
@@ -158,59 +154,56 @@ func level6() bool {
 			// Check if the password field is empty, "*", or "!"
 			passwordField := fields[1]
 			if passwordField == "" || passwordField == "*" || passwordField == "!" {
-				fmt.Printf("User without a password found: %s\n", fields[0])
+				// fmt.Printf("User without a password found: %s\n", fields[0])
 				return false
 			}
 			return true
 		}
 	}
 
-	return false // If dave is not found in /etc/shadow, consider it a fail
+	return false
 	// To pass: passwd dave
 }
 
 func level7() bool {
-	// Read the /etc/shadow file
-	dat, err := os.ReadFile("/etc/shadow")
+	cmd := exec.Command("ss", "-tuln")
+
+	out, err := cmd.Output()
 	check(err)
 
-	shadowLines := strings.Split(string(dat), "\n")
-	for _, line := range shadowLines {
-		// Skip empty lines
-		if line == "" {
-			continue
-		}
-		fields := strings.Split(line, ":")
-		// Ensure line has enough fields for password age checks
-		if len(fields) < 5 {
-			continue
-		}
-		lastPasswordChangeDay := fields[2]
-		maxPasswordAgeDays := fields[4]
+	output := string(out)
 
-		// Convert last password change day to integer
-		lastChange, err := strconv.Atoi(lastPasswordChangeDay)
-		if err != nil {
-			continue // Skip if conversion fails
-		}
-
-		// Convert max password age days to integer
-		maxAge, err := strconv.Atoi(maxPasswordAgeDays)
-		if err != nil || maxAge == 0 {
-			continue // Skip if conversion fails or maxAge is not set
-		}
-
-		// Calculate the age of the password
-		lastChangeDate := time.Unix(int64(lastChange*86400), 0)
-		ageDays := time.Since(lastChangeDate).Hours() / 24
-
-		if float64(maxAge) < ageDays || ageDays > 90 {
-			fmt.Printf("User with password age issue found: %s\n", fields[0])
-			return false // Password age exceeds 90 days or maxAge
-		}
+	// Check if port 3306 is not in the listening state
+	if !strings.Contains(output, ":3306") {
+		fmt.Println("Level Solved: No listener found on port 3306.")
+		return true
+	} else {
+		return false
 	}
+	// To pass: kill the process listening on port 3306
+}
 
-	return true // All user passwords comply with the age policy
+func printhint(level string) {
+	switch level {
+	case "level 1":
+		fmt.Println("- Try checking if your sshd config is living up to current best practices regarding password-based logins")
+	case "level 1.5":
+		fmt.Println("- How are users supposed to login via SSH without password authentication?")
+	case "level 1.75":
+		fmt.Println("- It's not always a good idea to let users log in as root")
+	case "level 2":
+		fmt.Println("- Ensure your iptables configuration protects against brute-force attempts.")
+	case "level 3":
+		fmt.Println("- What are SUID binaries and how can you list all of them on your system? Which ones can be used by attackers to perform priviledge escalation")
+	case "level 4":
+		fmt.Println("- Try finding out if any users can run commands as sudo. Should the user be able to run that command? Could it be dangerous?")
+	case "level 5":
+		fmt.Println("- Check for unexpected user entries in /etc/passwd that could indicate security issues.")
+	case "level 6":
+		fmt.Println("- Check for non-service users without a password set and remove them")
+	case "level 7":
+		fmt.Println("- Make sure you then expose ports on the server needlessly")
+	}
 }
 
 var hintFlag bool
@@ -221,77 +214,28 @@ func main() {
 	flag.BoolVar(&hintFlag, "hints", false, "Shows hint for each level. Try to not use this too much")
 	flag.Parse()
 
-	if !level1("PasswordAuthentication", "no") {
-		fmt.Println("1: ☐")
-		if hintFlag {
-			fmt.Println("- Try checking if your sshd config is living up to current best practices regarding password-based logins")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("1: ☒")
-	// Maybe add a short explainer after each level with what they did right
-	if !level1("PubkeyAuthentication", "yes") {
-		fmt.Println("1.5: ☐")
-		if hintFlag {
-			fmt.Println("- How are users supposed to login via SSH without password authentication?")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("1.5: ☒")
+	levelResults := make(map[string](bool))
 
-	if !level2() {
-		fmt.Println("2: ☐")
-		if hintFlag {
-			fmt.Println("- Ensure your iptables configuration protects against brute-force SSH login attempts.")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("2: ☒")
+	levelResults["level 1"] = level1("PasswordAuthentication", "no")
+	levelResults["level 1.5"] = level1("PubkeyAuthentication", "yes")
+	levelResults["level 1.75"] = level1("PermitRootLogin", "no")
+	levelResults["level 2"] = level2()
+	levelResults["level 3"] = level3()
+	levelResults["level 4"] = level4()
+	levelResults["level 5"] = level5()
+	levelResults["level 6"] = level6()
+	levelResults["level 7"] = level7()
 
-	if !level3() {
-		fmt.Println("3: ☐")
-		if hintFlag {
-			fmt.Println("- What are SUID binaries and how can you list all of them on your system? Which ones can be used by attackers to perform priviledge escalation")
+	for level, passed := range levelResults {
+		if passed {
+			fmt.Printf("%s: ☒\n", level)
+		} else {
+			fmt.Printf("%s: ☐\n", level)
+			if hintFlag {
+				printhint(level)
+			}
 		}
-		os.Exit(0)
 	}
-	fmt.Println("3: ☒")
-
-	if !level4() {
-		fmt.Println("4: ☐")
-		if hintFlag {
-			fmt.Println("- Try finding out if any users can run commands as sudo. Should the user be able to run that command? Could it be dangerous?")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("4: ☒")
-
-	if !level5() {
-		fmt.Println("5: ☐")
-		if hintFlag {
-			fmt.Println("- Check for unexpected user entries in /etc/passwd that could indicate security issues.")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("5: ☒")
-
-	if !level6() {
-		fmt.Println("6: ☐")
-		if hintFlag {
-			fmt.Println("- Check for non-service users without a password set and remove them")
-		}
-		os.Exit(0)
-	}
-	fmt.Println("6: ☒")
-
-	if !level7() {
-		fmt.Println("7: ☐")
-		if hintFlag {
-			fmt.Println("- Ensure all user passwords are changed at least every 90 days.") // maybe remove this chall we've kinda talked shit about this during lectures
-		}
-		os.Exit(0)
-	}
-	fmt.Println("7: ☒")
 
 	// Do some iptable stuff regarding our nice ssh server, such as rate limiting. Check for whatever method is taught by the course
 	// DO some fail2ban stuff
@@ -309,4 +253,5 @@ func main() {
 	// 3. Set strong password policy
 	// IDEA: set an interactive shell for a service account in passwd
 	// IDEA: bonus levels with linux backdoors??? Could be cool.
+	// IDEA: Add the option to disallow users to reuse old passwords
 }
