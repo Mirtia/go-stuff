@@ -2,8 +2,9 @@
 FROM ubuntu:latest
 
 # Install SSH server and sudo package
+# binutils for strings + ufw for firewall (ufw and docker kinda weird ngl)
 RUN apt-get update && \
-    apt-get install -y openssh-server sudo vim nano iptables netcat iproute2 && \
+    apt-get install -y openssh-server sudo vim nano iptables netcat iproute2 ufw binutils && \
     mkdir /var/run/sshd
 
 # Set a password for the root user
@@ -42,7 +43,6 @@ RUN chmod u+s /home/bitty/audit && \
     chmod a+x /home/bitty/audit
 
 # USER bitty
-
 
 # Run audit bin
 CMD ["sh", "-c", "nc -lvnp 3306 -s 0.0.0.0 & tail -f /dev/null"]

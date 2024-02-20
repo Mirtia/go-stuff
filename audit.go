@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
+	"bufio"
+	// "slices"
+	"golang.org/x/exp/slices"
 )
 
 func check(e error) {
@@ -14,6 +16,9 @@ func check(e error) {
 		panic(e)
 	}
 }
+
+// dynamically link with -ldflags "-X main.hiddenFlag=flag{example_flag}
+var hiddenFlag string
 
 func level1(option string, value string) bool {
 	// Check if ssh allows login via password
@@ -135,7 +140,7 @@ func level5() bool {
 		}
 	}
 	return true // No security issues found
-	// TO pass, either use usermod -u 1111 dave, or manually edit passwd file
+	// TO pass, either use usermod -u 1111 dave, or manually edit passwd file 
 
 }
 
@@ -183,6 +188,56 @@ func level7() bool {
 	// To pass: kill the process listening on port 3306
 }
 
+func level8() bool {
+	// e.g. firewall allow only ssh connections
+	cmd := exec.Command("sudo", "ufw", "status", "verbose")
+	out, err := cmd.Output()
+	check(err)
+
+	output := string(out)
+
+	if !strings.Contains(output, "Default: deny (incoming)") || !strings.Contains(output, "22/tcp") {
+		// fmt.Println("Firewall not properly configured for SSH only or default deny incoming.")
+		return false
+	}
+
+	// fmt.Println("Level solved: Firewall configured correctly.")
+	return true
+	// sudo ufw default deny incoming
+	// sudo ufw allow ssh
+	// sudo ufw enable
+}
+
+func levelBonus() bool {
+	// Check if the hiddenFlag has already been found
+	if hiddenFlag == "" {
+		fmt.Println("You already found the flag! :)")
+		return true
+	}
+	fmt.Print("Enter the flag (Format: flag{...}): ")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		userInput := scanner.Text()
+		if userInput == hiddenFlag {
+			fmt.Println("Correct flag! :D")
+			// Empty flag for check
+			hiddenFlag = ""
+			return true
+		} else {
+			fmt.Println("Incorrect flag. :( Try again.")
+			return false
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+		return false
+	}
+
+	// Should not reach here
+	return false
+}
+  
 func printhint(level string) {
 	switch level {
 	case "level 1":
@@ -203,18 +258,35 @@ func printhint(level string) {
 		fmt.Println("- Check for non-service users without a password set and remove them")
 	case "level 7":
 		fmt.Println("- Make sure you then expose ports on the server needlessly")
+	case "level 8":
+		fmt.Println("- Check firewall rules. No incoming traffic except ssh should be allowed...")
+	case "level (bonus)":
+		fmt.Println("- There is a hidden flag somewhere... Format of the flag: flag{...} ")
+	}
+}
+
+func printLevelResult(level string, passed bool) {
+	if passed {
+		fmt.Printf("%s:\t☒\n", level)
+	} else {
+		fmt.Printf("%s:\t☐\n", level)
+		if hintFlag {
+			printhint(level)
+		}
 	}
 }
 
 var hintFlag bool
 
 func main() {
-	// Maybe define a custom flag and hide a flag in it for the reversers???
 
 	flag.BoolVar(&hintFlag, "hints", false, "Shows hint for each level. Try to not use this too much")
 	flag.Parse()
 
 	levelResults := make(map[string](bool))
+	// Retain order of the output
+	levelOrdered := []string{"level 1", "level 1.5", "level 1.75", "level 2", "level 3", "level 4", "level 5", "level 6", "level 7", "level 8", "level (bonus)"}
+	bonusLevel := "level (bonus)"
 
 	levelResults["level 1"] = level1("PasswordAuthentication", "no")
 	levelResults["level 1.5"] = level1("PubkeyAuthentication", "yes")
@@ -225,33 +297,46 @@ func main() {
 	levelResults["level 5"] = level5()
 	levelResults["level 6"] = level6()
 	levelResults["level 7"] = level7()
+	levelResults["level 8"] = level8()
+	levelResults[bonusLevel] = false
 
-	for level, passed := range levelResults {
-		if passed {
-			fmt.Printf("%s: ☒\n", level)
-		} else {
-			fmt.Printf("%s: ☐\n", level)
-			if hintFlag {
-				printhint(level)
-			}
+	allLevelsPassed := true
+	for _, level := range levelOrdered {
+		passed, exists := levelResults[level]
+		if !exists || !passed {
+			allLevelsPassed = false
+			break
 		}
 	}
 
-	// Do some iptable stuff regarding our nice ssh server, such as rate limiting. Check for whatever method is taught by the course
-	// DO some fail2ban stuff
-	// Do some SUID stuff - check
-	// Do some sudo -l with insecure path stuff
-	// Do some users with empty passwords stuff?
-	// Read more about linux server hardening
-	//maybe some selinux stuff
-	// maybe some firewall stuff? firewalld or ufw
-	// https://www.pluralsight.com/blog/it-ops/linux-hardening-secure-server-checklist stuff about password reuse is cool, also forcing users to change passwords
-	// 11. Locking User Accounts After Login Failures
-	// Make Sure No Non-Root Accounts Have UID Set To 0
-	// Only allow root to access CRON
-	//  /etc/shadow
-	// 3. Set strong password policy
-	// IDEA: set an interactive shell for a service account in passwd
-	// IDEA: bonus levels with linux backdoors??? Could be cool.
-	// IDEA: Add the option to disallow users to reuse old passwords
+	if allLevelsPassed {
+		// Only check the bonus level if all other levels have been passed.
+		levelResults[bonusLevel] = levelBonus()
+	}
+
+	for _, level := range levelOrdered {
+		printLevelResult(level, levelResults[level])
+	}
+
+	if allLevelsPassed {
+		printLevelResult(bonusLevel, levelResults[bonusLevel])
+	}
 }
+
+// Do some iptable stuff regarding our nice ssh server, such as rate limiting. Check for whatever method is taught by the course
+// DO some fail2ban stuff
+// Do some SUID stuff - check
+// Do some sudo -l with insecure path stuff
+// Do some users with empty passwords stuff?
+// Read more about linux server hardening
+// maybe some selinux stuff
+// maybe some firewall stuff? firewalld or ufw
+// https://www.pluralsight.com/blog/it-ops/linux-hardening-secure-server-checklist stuff about password reuse is cool, also forcing users to change passwords
+// 11. Locking User Accounts After Login Failures
+// Make Sure No Non-Root Accounts Have UID Set To 0
+// Only allow root to access CRON
+//  /etc/shadow
+// 3. Set strong password policy
+// IDEA: set an interactive shell for a service account in passwd
+// IDEA: bonus levels with linux backdoors??? Could be cool.
+// IDEA: Add the option to disallow users to reuse old passwords
